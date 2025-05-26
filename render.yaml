@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: st-peters-jhs-results
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 10000
+    healthCheckPath: /
+    autoDeploy: true
