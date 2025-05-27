@@ -1,19 +1,17 @@
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
-import { Toaster } from '@/components/ui/toaster';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from '@/components/ui/use-toast';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
-import { GraduationCap } from 'lucide-react';
 
-// Lazy imports with correct paths
-const AdminDashboardLayout = lazy(() => import('@/layouts/AdminDashboardLayout'));
+// Lazy load pages
+const LoginPage = lazy(() => import('@/pages/LoginPage'));
 const StudentResultsPage = lazy(() => import('@/pages/AdminDashboard/StudentResultsPage'));
-const AdminDashboardHome = lazy(() => import('@/pages/AdminDashboard/Home'));
 
 const ProtectedRoute = ({ children, role }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return <LoadingSpinner />;
+    return <div className="flex justify-center items-center min-h-screen">Loading...</div>;
   }
 
   if (!user) {
@@ -21,9 +19,9 @@ const ProtectedRoute = ({ children, role }) => {
   }
 
   if (role && user.role !== role) {
-    return <Navigate to="/unauthorized" replace />;
+    return <Navigate to="/" replace />;
   }
-  
+
   return children;
 };
 
@@ -31,22 +29,24 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <Suspense fallback={<LoadingSpinner />}>
+        <Suspense fallback={<div className="flex justify-center items-center min-h-screen">Loading...</div>}>
           <Routes>
-            {/* Admin Routes */}
+            {/* Public Routes */}
+            <Route path="/login" element={<LoginPage />} />
+            
+            {/* Protected Admin Route */}
             <Route 
-              path="/admin" 
+              path="/student-results" 
               element={
                 <ProtectedRoute role="admin">
-                  <AdminDashboardLayout />
+                  <StudentResultsPage />
                 </ProtectedRoute>
-              }
-            >
-              <Route index element={<AdminDashboardHome />} />
-              <Route path="student-results" element={<StudentResultsPage />} />
-            </Route>
-
-            {/* Add your other routes here */}
+              } 
+            />
+            
+            {/* Default Route */}
+            <Route path="/" element={<Navigate to="/student-results" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           <Toaster />
         </Suspense>
@@ -54,11 +54,5 @@ function App() {
     </Router>
   );
 }
-
-const LoadingSpinner = () => (
-  <div className="flex items-center justify-center min-h-screen">
-    <GraduationCap className="w-16 h-16 text-primary animate-spin" />
-  </div>
-);
 
 export default App;
