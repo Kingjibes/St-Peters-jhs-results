@@ -1,20 +1,23 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNavigate, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { Users, BookOpen, FileText, Settings as SettingsIcon, LayoutDashboard, LogOut, ChevronRight, Menu, X } from 'lucide-react';
-import AdminDashboardHome from '@/pages/AdminDashboard/AdminDashboardHome';
-import StudentManagement from '@/pages/AdminDashboard/StudentManagement';
-import SubjectManagement from '@/pages/AdminDashboard/SubjectManagement';
-import GenerateResults from '@/pages/AdminDashboard/GenerateResults';
-import AdminSettings from '@/pages/AdminDashboard/AdminSettings';
+import { Users, BookOpen, FileText, Settings as SettingsIcon, LayoutDashboard, LogOut, Menu, X, BarChart3, Loader2 } from 'lucide-react';
+
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+
+const AdminDashboardHome = lazy(() => import('@/pages/AdminDashboard/AdminDashboardHome'));
+const StudentManagement = lazy(() => import('@/pages/AdminDashboard/StudentManagement'));
+const SubjectManagement = lazy(() => import('@/pages/AdminDashboard/SubjectManagement'));
+const GenerateResults = lazy(() => import('@/pages/AdminDashboard/GenerateResults'));
+const AdminSettings = lazy(() => import('@/pages/AdminDashboard/AdminSettings'));
+const StudentResultsPage = lazy(() => import('@/pages/AdminDashboard/StudentResultsPage'));
 
 
 const AdminSidebar = ({ isOpen, toggleSidebar, isMobile }) => {
@@ -26,7 +29,8 @@ const AdminSidebar = ({ isOpen, toggleSidebar, isMobile }) => {
     { name: 'Dashboard', path: '/admin', icon: LayoutDashboard },
     { name: 'Student Management', path: '/admin/students', icon: Users },
     { name: 'Subject Management', path: '/admin/subjects', icon: BookOpen },
-    { name: 'Generate Results', path: '/admin/results', icon: FileText },
+    { name: 'Class Results', path: '/admin/results', icon: FileText },
+    { name: 'Student Results', path: '/admin/student-results', icon: BarChart3 },
     { name: 'Settings', path: '/admin/settings', icon: SettingsIcon },
   ];
 
@@ -36,10 +40,10 @@ const AdminSidebar = ({ isOpen, toggleSidebar, isMobile }) => {
   };
   
   const isActive = (path) => {
-    if (path === '/admin' && (location.pathname === '/admin' || location.pathname === '/admin/')) {
-      return true;
+    if (path === '/admin') {
+        return location.pathname === '/admin' || location.pathname === '/admin/';
     }
-    return location.pathname.startsWith(path) && path !== '/admin';
+    return location.pathname.startsWith(path);
   };
 
   const sidebarVariants = {
@@ -50,7 +54,6 @@ const AdminSidebar = ({ isOpen, toggleSidebar, isMobile }) => {
   };
   
   const currentVariant = isMobile ? (isOpen ? "mobileOpen" : "mobileClosed") : (isOpen ? "open" : "closed");
-
 
   return (
     <TooltipProvider delayDuration={100}>
@@ -128,6 +131,12 @@ const AdminSidebar = ({ isOpen, toggleSidebar, isMobile }) => {
   );
 };
 
+const PageLoader = () => (
+  <div className="flex items-center justify-center h-full min-h-[calc(100vh-200px)]">
+    <Loader2 className="h-12 w-12 animate-spin text-primary" />
+  </div>
+);
+
 const AdminDashboardPage = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [isSidebarOpen, setIsSidebarOpen] = useState(!isMobile);
@@ -139,13 +148,13 @@ const AdminDashboardPage = () => {
       const mobileCheck = window.innerWidth < 768;
       setIsMobile(mobileCheck);
       if (mobileCheck) {
-        setIsSidebarOpen(false); // Always close on mobile resize initially
+        setIsSidebarOpen(false); 
       } else {
-        setIsSidebarOpen(true); // Open on desktop resize
+        setIsSidebarOpen(true); 
       }
     };
     window.addEventListener('resize', handleResize);
-    handleResize(); // Initial check
+    handleResize(); 
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
@@ -172,13 +181,16 @@ const AdminDashboardPage = () => {
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
       >
         <div className={`pt-12 ${isMobile ? 'md:pt-0' : 'md:pt-0'}`}>
-          <Routes>
-            <Route index element={<AdminDashboardHome />} />
-            <Route path="students" element={<StudentManagement />} />
-            <Route path="subjects" element={<SubjectManagement />} />
-            <Route path="results" element={<GenerateResults />} />
-            <Route path="settings" element={<AdminSettings />} />
-          </Routes>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route index element={<AdminDashboardHome />} />
+              <Route path="students" element={<StudentManagement />} />
+              <Route path="subjects" element={<SubjectManagement />} />
+              <Route path="results" element={<GenerateResults />} />
+              <Route path="student-results" element={<StudentResultsPage />} />
+              <Route path="settings" element={<AdminSettings />} />
+            </Routes>
+          </Suspense>
         </div>
       </motion.main>
       
