@@ -1,6 +1,6 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Toaster } from '@/components/ui/use-toast';
+import { Toaster } from '@/components/ui/toaster'; // Fixed import path
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 
 // Lazy load pages
@@ -31,10 +31,7 @@ function App() {
       <AuthProvider>
         <Suspense fallback={<div className="flex justify-center items-center min-h-screen">Loading...</div>}>
           <Routes>
-            {/* Public Routes */}
             <Route path="/login" element={<LoginPage />} />
-            
-            {/* Protected Admin Route */}
             <Route 
               path="/student-results" 
               element={
@@ -43,11 +40,10 @@ function App() {
                 </ProtectedRoute>
               } 
             />
-            
-            {/* Default Route */}
             <Route path="/" element={<Navigate to="/student-results" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          {/* Toaster component must be placed here */}
           <Toaster />
         </Suspense>
       </AuthProvider>
