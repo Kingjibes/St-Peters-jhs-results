@@ -2,15 +2,21 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Edit, Trash2, AlertTriangle } from 'lucide-react';
+import { Edit, Trash2, AlertTriangle, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 const StudentTable = ({ students, handleEditStudent, handleDeleteStudent, isLoading }) => {
-  if (isLoading && students.length === 0) {
-    return <p className="text-center text-muted-foreground mt-8 text-lg">Loading students, please wait...</p>;
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center text-center text-muted-foreground mt-8 p-6 bg-card rounded-lg shadow-md border border-border/50">
+        <Loader2 className="mx-auto h-12 w-12 text-primary animate-spin mb-4" />
+        <p className="text-lg">Loading students, please wait...</p>
+        <p className="text-sm">Fetching the latest student records from the database.</p>
+      </div>
+    );
   }
 
-  if (students.length === 0) {
+  if (!isLoading && students.length === 0) {
     return (
       <motion.div 
         initial={{ opacity: 0, y:10 }}
@@ -18,8 +24,11 @@ const StudentTable = ({ students, handleEditStudent, handleDeleteStudent, isLoad
         className="text-center text-muted-foreground mt-8 p-6 bg-card rounded-lg shadow-md border border-border/50"
       >
         <AlertTriangle className="mx-auto h-12 w-12 text-yellow-500 mb-4" />
-        <p className="text-lg">No students found.</p>
-        <p className="text-sm">Add students manually using the form above or import them via a CSV/Excel file.</p>
+        <p className="text-lg font-semibold">No Students Found</p>
+        <p className="text-sm">
+          It seems there are no student records yet. 
+          You can add students manually using the form above or import them using a CSV/Excel file.
+        </p>
       </motion.div>
     );
   }
@@ -28,7 +37,7 @@ const StudentTable = ({ students, handleEditStudent, handleDeleteStudent, isLoad
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      transition={{ duration: 0.5, delay: 0.2 }}
+      transition={{ duration: 0.5, delay: 0.1 }}
     >
       <Card className="shadow-xl border-border/60 bg-gradient-to-br from-card via-card to-card/90">
         <CardHeader className="border-b border-border/50 py-4">
