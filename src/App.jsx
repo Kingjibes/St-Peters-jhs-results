@@ -1,35 +1,19 @@
-
-import React, { Suspense, lazy, useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { Suspense, lazy } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { Toaster } from '@/components/ui/toaster';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
-import { AnimatePresence, motion } from 'framer-motion';
 import { GraduationCap } from 'lucide-react';
 
-const PreloaderPage = lazy(() => import('@/pages/PreloaderPage'));
-const RegisterPage = lazy(() => import('@/pages/RegisterPage'));
-const LoginPage = lazy(() => import('@/pages/LoginPage'));
-const VerifyEmailPage = lazy(() => import('@/pages/VerifyEmailPage'));
-const RegistrationSuccessPage = lazy(() => import('@/pages/RegistrationSuccessPage'));
-const ForgotPasswordPage = lazy(() => import('@/pages/ForgotPasswordPage'));
-const AdminDashboardPage = lazy(() => import('@/pages/AdminDashboardPage'));
-const TeacherDashboardPage = lazy(() => import('@/pages/TeacherDashboardPage'));
-const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
+// Lazy imports with correct paths
+const AdminDashboardLayout = lazy(() => import('@/layouts/AdminDashboardLayout'));
+const StudentResultsPage = lazy(() => import('@/pages/AdminDashboard/StudentResultsPage'));
+const AdminDashboardHome = lazy(() => import('@/pages/AdminDashboard/Home'));
 
 const ProtectedRoute = ({ children, role }) => {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-purple-600 to-blue-500">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-        >
-          <GraduationCap className="w-16 h-16 text-white" />
-        </motion.div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   if (!user) {
@@ -37,80 +21,44 @@ const ProtectedRoute = ({ children, role }) => {
   }
 
   if (role && user.role !== role) {
-    return <Navigate to="/login" replace />; // Or a specific unauthorized page
+    return <Navigate to="/unauthorized" replace />;
   }
   
   return children;
 };
 
-function AppContent() {
-  const [showPreloader, setShowPreloader] = useState(true);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowPreloader(false);
-    }, 4000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  if (showPreloader) {
-    return <PreloaderPage />;
-  }
-
-  return (
-    <Suspense fallback={
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-purple-600 to-blue-500">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-        >
-          <GraduationCap className="w-16 h-16 text-white" />
-        </motion.div>
-      </div>
-    }>
-      <AnimatePresence mode="wait">
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/verify-email" element={<VerifyEmailPage />} />
-          <Route path="/registration-success" element={<RegistrationSuccessPage />} />
-          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-          
-          <Route 
-            path="/admin/*" 
-            element={
-              <ProtectedRoute role="admin">
-                <AdminDashboardPage />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/teacher/*" 
-            element={
-              <ProtectedRoute role="teacher">
-                <TeacherDashboardPage />
-              </ProtectedRoute>
-            } 
-          />
-          
-          <Route path="/" element={<Navigate to="/login" />} />
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
-      </AnimatePresence>
-      <Toaster />
-    </Suspense>
-  );
-}
-
 function App() {
   return (
     <Router>
       <AuthProvider>
-        <AppContent />
+        <Suspense fallback={<LoadingSpinner />}>
+          <Routes>
+            {/* Admin Routes */}
+            <Route 
+              path="/admin" 
+              element={
+                <ProtectedRoute role="admin">
+                  <AdminDashboardLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<AdminDashboardHome />} />
+              <Route path="student-results" element={<StudentResultsPage />} />
+            </Route>
+
+            {/* Add your other routes here */}
+          </Routes>
+          <Toaster />
+        </Suspense>
       </AuthProvider>
     </Router>
   );
 }
 
+const LoadingSpinner = () => (
+  <div className="flex items-center justify-center min-h-screen">
+    <GraduationCap className="w-16 h-16 text-primary animate-spin" />
+  </div>
+);
+
 export default App;
-  
