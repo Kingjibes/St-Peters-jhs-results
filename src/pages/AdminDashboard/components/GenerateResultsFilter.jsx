@@ -1,8 +1,10 @@
 import React from 'react';
-import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel as SelectLabelComponent } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Search } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 const GenerateResultsFilter = ({
   generationType,
@@ -17,7 +19,12 @@ const GenerateResultsFilter = ({
   selectedSubject,
   onSelectedSubjectChange,
   isLoading,
-  onFetchResults
+  onFetchResults,
+  allStudents,
+  selectedStudent,
+  onSelectedStudentChange,
+  searchTerm,
+  onSearchTermChange
 }) => {
   return (
     <Card className="mb-6 shadow-lg border-border/60 bg-gradient-to-br from-card via-card to-card/90">
@@ -31,11 +38,12 @@ const GenerateResultsFilter = ({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">For All Results</SelectItem>
-            <SelectItem value="specific">For Specific Class/Exam/Subject</SelectItem>
+            <SelectItem value="specificClass">For Specific Class/Exam/Subject</SelectItem>
+            <SelectItem value="specificStudent">For Specific Student</SelectItem>
           </SelectContent>
         </Select>
 
-        {generationType === 'specific' && (
+        {generationType === 'specificClass' && (
           <motion.div 
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
@@ -57,8 +65,48 @@ const GenerateResultsFilter = ({
             </Select>
           </motion.div>
         )}
+
+        {generationType === 'specificStudent' && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3 }}
+            className="space-y-4 pt-4 border-t border-border/30"
+          >
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search student by name or class..."
+                value={searchTerm}
+                onChange={(e) => onSearchTermChange(e.target.value)}
+                className="pl-10 bg-background/70 backdrop-blur-sm"
+                disabled={isLoading}
+              />
+            </div>
+            <Select value={selectedStudent} onValueChange={onSelectedStudentChange} disabled={isLoading || allStudents.length === 0}>
+              <SelectTrigger className="w-full bg-background/70 backdrop-blur-sm">
+                <SelectValue placeholder="Select Student" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectLabelComponent>
+                    {allStudents.length > 0 ? `Students (${allStudents.length})` : "No students match search or available"}
+                  </SelectLabelComponent>
+                  {allStudents.map(s => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name} ({s.classes?.name || 'N/A'})
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+          </motion.div>
+        )}
+
         <Button onClick={onFetchResults} disabled={isLoading} className="w-full md:w-auto bg-primary hover:bg-primary/90 text-primary-foreground transition-all duration-300 ease-in-out transform hover:scale-105">
-          {isLoading ? "Fetching Results..." : "Fetch Results"}
+          {isLoading ? "Fetching..." : "Fetch Results"}
         </Button>
       </CardContent>
     </Card>
