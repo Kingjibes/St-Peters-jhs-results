@@ -1,5 +1,3 @@
-
-
 import React, { Suspense, lazy, useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from '@/components/ui/toaster';
@@ -14,7 +12,6 @@ const VerifyEmailPage = lazy(() => import('@/pages/VerifyEmailPage'));
 const RegistrationSuccessPage = lazy(() => import('@/pages/RegistrationSuccessPage'));
 const ForgotPasswordPage = lazy(() => import('@/pages/ForgotPasswordPage'));
 const AdminDashboardPage = lazy(() => import('@/pages/AdminDashboardPage'));
-const StudentResultsPage = lazy(() => import('@/pages/StudentResultsPage'));
 const TeacherDashboardPage = lazy(() => import('@/pages/TeacherDashboardPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
@@ -86,14 +83,6 @@ function AppContent() {
               </ProtectedRoute>
             } 
           />
-          <Route 
-  path="/admin/student-results" 
-  element={
-    <ProtectedRoute role="admin">
-      <StudentResultsPage />
-    </ProtectedRoute>
-  } 
-/>
           <Route 
             path="/teacher/*" 
             element={
