@@ -9,13 +9,31 @@ import StudentForm from './components/StudentForm';
 import StudentTable from './components/StudentTable';
 import StudentImportExport from './components/StudentImportExport';
 
+const mapExcelClassLabelToDbName = (label) => {
+    if (!label || typeof label !== 'string' || label.length < 2) {
+        console.warn("mapExcelClassLabelToDbName: Invalid label input", label);
+        return null; 
+    }
+    const letterPart = label.charAt(0).toUpperCase(); 
+    const numberPart = label.substring(1); 
+
+    if (!isNaN(parseInt(numberPart, 10))) {
+        return `JHS ${numberPart}${letterPart}`; 
+    }
+    console.warn("mapExcelClassLabelToDbName: Label does not match expected pattern", label);
+    return label; 
+};
+
+
 const StudentManagement = () => {
     const [students, setStudents] = useState([]);
     const [classes, setClasses] = useState([]);
     const [newStudentName, setNewStudentName] = useState('');
     const [selectedClass, setSelectedClass] = useState('');
     const [editingStudent, setEditingStudent] = useState(null);
-    const [isLoading, setIsLoading] = useState(false);
+    const [isLoading, setIsLoading] = useState(false); // Manages overall page/component loading
+    const [isImporting, setIsImporting] = useState(false); // Specific for import operation
+
     const { toast } = useToast();
 
     const fetchStudents = useCallback(async () => {
@@ -131,25 +149,37 @@ const StudentManagement = () => {
     };
 
     const processImportedData = async (dataToImport) => {
-        setIsLoading(true);
+        setIsImporting(true); // Use specific import loading state
         let successfulImports = 0;
         let failedImports = 0;
         const studentsToInsert = [];
 
         try {
+            if (!dataToImport || dataToImport.length === 0) {
+                toast({ variant: "warning", title: "Empty Data", description: "No data found in the imported file to process." });
+                return; // Early return, finally will still execute
+            }
+
             for (const row of dataToImport) {
                 const studentName = row["Student Name"]?.trim() || row["student_name"]?.trim() || row["Name"]?.trim() || row["name"]?.trim();
-                const className = row["Class Name"]?.trim() || row["class_name"]?.trim() || row["Class"]?.trim() || row["class"]?.trim();
+                const excelClassLabel = row["Class Label"]?.trim() || row["class_label"]?.trim() || row["Class"]?.trim() || row["class"]?.trim();
 
-                if (!studentName || !className) {
+                if (!studentName || !excelClassLabel) {
                     failedImports++;
-                    console.warn("Skipping row due to missing student name or class name:", row);
+                    console.warn("Skipping row due to missing student name or class label:", row);
                     continue;
                 }
                 
-                const classObj = classes.find(c => c.name.toLowerCase() === className.toLowerCase());
+                const dbClassName = mapExcelClassLabelToDbName(excelClassLabel);
+                if (!dbClassName) {
+                    toast({variant: "warning", title: "Import Warning", description: `Invalid class label format "${excelClassLabel}" for student "${studentName}". Skipping.`});
+                    failedImports++;
+                    continue;
+                }
+
+                const classObj = classes.find(c => c.name.toLowerCase() === dbClassName.toLowerCase());
                 if (!classObj) {
-                    toast({variant: "warning", title: "Import Warning", description: `Class "${className}" not found for student "${studentName}". Skipping.`});
+                    toast({variant: "warning", title: "Import Warning", description: `Class "${dbClassName}" (mapped from "${excelClassLabel}") not found for student "${studentName}". Ensure the class exists in the system. Skipping.`});
                     failedImports++;
                     continue;
                 }
@@ -157,28 +187,34 @@ const StudentManagement = () => {
             }
 
             if (studentsToInsert.length > 0) {
-                const { error } = await supabase.from('students').insert(studentsToInsert);
+                const { error, count } = await supabase.from('students').insert(studentsToInsert).select('*', { count: 'exact' });
                 if (error) {
+                    console.error("Supabase insert error:", error);
                     throw error;
                 } else {
-                    successfulImports = studentsToInsert.length;
-                    await fetchStudents(); 
+                    successfulImports = count || studentsToInsert.length;
+                    if (successfulImports > 0) await fetchStudents(); 
                 }
             }
             toast({title: "Import Complete", description: `${successfulImports} students imported. ${failedImports} failed or skipped.`});
         } catch (error) {
+            console.error("Error during processImportedData:", error);
             toast({variant: "destructive", title: "Error importing students", description: error.message});
-            failedImports = dataToImport.length - successfulImports; // Estimate failed if batch insert fails
+            // failedImports calculation might be off if error occurs mid-loop, but this is a general catch
+            failedImports = dataToImport ? (dataToImport.length - successfulImports) : 0; 
         } finally {
-            setIsLoading(false);
+            setIsImporting(false); // Ensure this is always called
         }
     };
 
     const handleImportFile = (event) => {
         const file = event.target.files[0];
-        if (!file) return;
+        if (!file) {
+            // No file selected, do nothing or reset import state if needed
+            return;
+        }
 
-        setIsLoading(true); 
+        setIsImporting(true); 
         const reader = new FileReader();
         const fileExtension = file.name.split('.').pop().toLowerCase();
 
@@ -188,62 +224,78 @@ const StudentManagement = () => {
                 if (fileExtension === 'csv') {
                     const csvResult = Papa.parse(e.target.result, { header: true, skipEmptyLines: true });
                     if (csvResult.errors.length > 0) {
-                        throw new Error(`CSV Parsing Error: ${csvResult.errors.map(err => err.message).join(', ')}`);
+                        csvResult.errors.forEach(err => console.error("CSV Parsing Error:", err));
+                        throw new Error(`CSV Parsing Error(s): ${csvResult.errors.map(err => err.message).join(', ')}. Please check file format.`);
                     }
                     parsedData = csvResult.data;
                 } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
                     const workbook = XLSX.read(e.target.result, { type: 'binary' });
                     const sheetName = workbook.SheetNames[0];
+                    if (!sheetName) throw new Error("No sheets found in the Excel file.");
                     const worksheet = workbook.Sheets[sheetName];
-                    parsedData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                    parsedData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" }); 
                     
                     if (parsedData.length > 0) {
-                        const headers = parsedData[0];
+                        const headers = parsedData[0].map(h => (h ? h.toString().trim() : "")); 
+                        if (headers.length === 0 || headers.every(h => h === "")) {
+                             throw new Error("Excel headers are missing or empty. Required headers: 'Student Name', 'Class Label'.");
+                        }
                         parsedData = parsedData.slice(1).map(row => {
                             let obj = {};
                             headers.forEach((header, index) => {
-                                obj[header] = row[index];
+                                if (header) obj[header] = row[index]; 
                             });
                             return obj;
-                        });
+                        }).filter(obj => Object.keys(obj).length > 0 && (obj["Student Name"] || obj["Name"] || obj["student_name"] || obj["name"])); // Ensure student name exists
                     } else {
                         parsedData = [];
                     }
                 } else {
-                    throw new Error("Unsupported file type. Please upload CSV or Excel files.");
+                    throw new Error("Unsupported file type. Please upload CSV or Excel (.xls, .xlsx) files.");
                 }
 
                 if (!parsedData || parsedData.length === 0) {
-                    toast({variant: "destructive", title: "Import Error", description: "File is empty or data could not be parsed."});
-                    setIsLoading(false); // Ensure loading is stopped
-                    return;
+                    toast({variant: "warning", title: "Import Warning", description: "File is empty or no data rows could be parsed. Please check file content and headers."});
+                } else {
+                    await processImportedData(parsedData);
                 }
-                await processImportedData(parsedData);
 
             } catch (error) {
+                console.error("Import Error caught in reader.onload:", error);
                 toast({variant: "destructive", title: "Import Error", description: error.message});
-                setIsLoading(false); // Ensure loading is stopped on error
             } finally {
+                setIsImporting(false); 
                 if(event.target) event.target.value = ""; 
             }
         };
         
-        reader.onerror = () => {
-            toast({variant: "destructive", title: "File Read Error", description: "Could not read the selected file."});
-            setIsLoading(false); // Ensure loading is stopped on file read error
+        reader.onerror = (error) => {
+            console.error("File Read Error:", error);
+            toast({variant: "destructive", title: "File Read Error", description: "Could not read the selected file. It might be corrupted or in use."});
+            setIsImporting(false); 
             if(event.target) event.target.value = "";
         };
 
-        if (fileExtension === 'csv') {
-            reader.readAsText(file);
-        } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
-            reader.readAsBinaryString(file);
-        } else {
-            toast({variant: "destructive", title: "Unsupported File Type", description: "Please upload a CSV or Excel (.xls, .xlsx) file."});
-            setIsLoading(false); // Ensure loading is stopped for unsupported type
-            if(event.target) event.target.value = "";
+        try {
+            if (fileExtension === 'csv') {
+                reader.readAsText(file);
+            } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+                reader.readAsBinaryString(file);
+            } else {
+                toast({variant: "destructive", title: "Unsupported File Type", description: "Please upload a CSV or Excel (.xls, .xlsx) file."});
+                setIsImporting(false); 
+                if(event.target) event.target.value = "";
+            }
+        } catch (error) {
+             console.error("Error initiating file read:", error);
+             toast({variant: "destructive", title: "File Read Initiation Error", description: error.message});
+             setIsImporting(false);
+             if(event.target) event.target.value = "";
         }
     };
+
+    // Combined loading state for UI elements that should be disabled during any loading activity
+    const uiDisabled = isLoading || isImporting;
 
     return (
         <motion.div 
@@ -257,7 +309,7 @@ const StudentManagement = () => {
                     Student Management
                 </h1>
                 <p className="text-muted-foreground mt-1">
-                    Add, edit, delete, and import student records efficiently.
+                    Add, edit, delete, and import student records efficiently. Ensure Excel files have headers: 'Student Name' and 'Class Label'.
                 </p>
             </header>
 
@@ -270,13 +322,13 @@ const StudentManagement = () => {
                 editingStudent={editingStudent}
                 handleSubmit={handleSubmitStudent}
                 handleCancelEdit={handleCancelEdit}
-                isLoading={isLoading}
+                isLoading={uiDisabled}
             />
 
             <StudentImportExport
                 handleImportFile={handleImportFile}
                 handleExportData={handleExportData}
-                isLoading={isLoading}
+                isLoading={uiDisabled} 
                 hasStudents={students.length > 0}
             />
             
@@ -284,7 +336,7 @@ const StudentManagement = () => {
                 students={students}
                 handleEditStudent={handleEditStudent}
                 handleDeleteStudent={handleDeleteStudent}
-                isLoading={isLoading}
+                isLoading={uiDisabled} 
             />
         </motion.div>
     );
