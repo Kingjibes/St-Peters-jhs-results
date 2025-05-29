@@ -1,213 +1,175 @@
 import { supabase } from '@/lib/supabaseClient';
 
-// Core subject names with all possible variations
-export const CORE_SUBJECT_NAMES_LOWERCASE = [
-  "mathematics", "maths",
-  "english language", "english",
-  "integrated science", "science",
-  "social studies"
-];
+// Core subjects configuration exactly matching your report
+const CORE_SUBJECTS_CONFIG = {
+  ENGLISH: {
+    codes: ['eng', 'english','english language'],
+    name: 'English',
+    weight: 1
+  },
+  MATH: {
+    codes: ['math', 'mathematics'],
+    name: 'Math',
+    weight: 1
+  },
+  SCIENCE: {
+    codes: ['sci', 'science','integrated science'],
+    name: 'Science',
+    weight: 1
+  },
+  SOCIAL_STUDIES: {
+    codes: ['soc', 'social studies'],
+    name: 'Social Studies',
+    weight: 1
+  }
+};
 
-export async function fetchFilterData() {
-  const [examRes, classRes, subjectRes, studentRes] = await Promise.all([
-    supabase.from('examinations').select('id, name, examination_date').order('examination_date', { ascending: false }),
-    supabase.from('classes').select('id, name').order('name'),
-    supabase.from('subjects').select('id, name').order('name'),
-    supabase.from('students').select('id, name, classes (id, name)').order('name')
-  ]);
+// Get all possible core subject codes
+export const CORE_SUBJECT_CODES = Object.values(CORE_SUBJECTS_CONFIG)
+  .flatMap(subject => subject.codes);
 
-  if (examRes.error) throw examRes.error;
-  if (classRes.error) throw classRes.error;
-  if (subjectRes.error) throw subjectRes.error;
-  if (studentRes.error) throw studentRes.error;
-  
-  return {
-    examinations: examRes.data || [],
-    classes: classRes.data || [],
-    subjects: subjectRes.data || [],
-    allStudents: studentRes.data || [],
-  };
-}
-
-const calculateRank = (currentScore, allScores) => {
+// Ranking function that matches your report's unique ranking system
+const calculateExamRank = (studentScore, allScores) => {
   if (!allScores || allScores.length === 0) return 'N/A';
   
-  const numericScores = allScores
-    .map(score => Number(score))
-    .filter(score => !isNaN(score));
-    
-  if (numericScores.length === 0) return 'N/A';
+  // Convert to numbers and sort descending
+  const numericScores = [...new Set(allScores.map(s => Number(s)).filter(s => !isNaN(s))];
+  const sortedScores = numericScores.sort((a, b) => b - a);
   
-  const sortedUniqueScores = [...new Set(numericScores)].sort((a, b) => b - a);
-  const rank = sortedUniqueScores.findIndex(score => currentScore >= score) + 1;
-  
-  return rank || 'N/A';
+  // Find the student's position (no ties)
+  return sortedScores.indexOf(studentScore) + 1 || 'N/A';
 };
 
 export async function processStudentResultsForDetailView(supabaseClient, studentId, allStudentsList) {
-  const { data: studentResults, error: studentResultsError } = await supabaseClient
+  const { data: studentResults, error: resultsError } = await supabaseClient
     .from('results')
     .select(`
       marks,
-      created_at,
-      sessions (
-        id,
+      sessions(
         examination_id,
         class_id,
         subject_id,
-        examinations (id, name, examination_date),
-        classes (id, name),
-        subjects (id, name)
+        examinations(name, examination_date),
+        classes(name),
+        subjects(name)
       )
     `)
     .eq('student_id', studentId);
 
-  if (studentResultsError) throw studentResultsError;
-  if (!studentResults || studentResults.length === 0) return null;
+  if (resultsError) throw resultsError;
+  if (!studentResults?.length) return null;
 
   const studentInfo = allStudentsList.find(s => s.id === studentId);
-  const studentClassId = studentResults[0]?.sessions?.class_id;
+  const studentClassId = studentResults[0].sessions.class_id;
 
+  // Process results by examination
   const resultsByExamination = studentResults.reduce((acc, result) => {
     const examId = result.sessions.examination_id;
     if (!acc[examId]) {
       acc[examId] = {
         examinationName: result.sessions.examinations.name,
-        examinationDate: result.sessions.examinations.examination_date ? 
-          new Date(result.sessions.examinations.examination_date).toLocaleDateString() : 'N/A',
+        examinationDate: result.sessions.examinations.examination_date,
         className: result.sessions.classes.name,
         subjects: [],
-        overallTotalMarks: 0,
-        coreSubjectsRawScore: 0,
+        overallTotal: 0,
+        coreSubjects: {
+          english: { marks: 0, position: 'N/A' },
+          math: { marks: 0, position: 'N/A' },
+          science: { marks: 0, position: 'N/A' },
+          socialStudies: { marks: 0, position: 'N/A' },
+          rawTotal: 0,
+          position: 'N/A'
+        }
       };
     }
-    
-    const subjectData = {
-      id: result.sessions.subjects.id,
+
+    const subjectName = result.sessions.subjects.name.toLowerCase();
+    const marks = Number(result.marks) || 0;
+
+    // Add to subjects list
+    acc[examId].subjects.push({
       name: result.sessions.subjects.name,
-      marks: result.marks,
-      sessionId: result.sessions.id,
-    };
-    
-    acc[examId].subjects.push(subjectData);
-    acc[examId].overallTotalMarks += result.marks;
-    
-    if (CORE_SUBJECT_NAMES_LOWERCASE.some(coreSub => 
-      result.sessions.subjects.name.toLowerCase().includes(coreSub.toLowerCase())
-    )) {
-      acc[examId].coreSubjectsRawScore += result.marks;
+      marks,
+      position: 'N/A' // Will be calculated later
+    });
+
+    // Add to overall total
+    acc[examId].overallTotal += marks;
+
+    // Check and add to core subjects
+    for (const [subjectKey, config] of Object.entries(CORE_SUBJECTS_CONFIG)) {
+      if (config.codes.some(code => subjectName.includes(code))) {
+        acc[examId].coreSubjects[subjectKey.toLowerCase()].marks = marks;
+        acc[examId].coreSubjects.rawTotal += marks;
+        break;
+      }
     }
-    
+
     return acc;
   }, {});
 
   // Calculate rankings for each examination
   for (const examId in resultsByExamination) {
     const examData = resultsByExamination[examId];
-    
-    // Subject-wise ranking
+
+    // 1. Calculate subject positions
     for (const subject of examData.subjects) {
-      const { data: allSubjectSessionResults, error: subjectSessionError } = await supabaseClient
+      const { data: subjectResults, error } = await supabaseClient
         .from('results')
         .select('marks')
         .eq('session_id', subject.sessionId);
-        
-      subject.rank = subjectSessionError ? 'N/A' : 
-        calculateRank(subject.marks, allSubjectSessionResults.map(r => r.marks));
+
+      subject.position = error ? 'N/A' : calculateExamRank(subject.marks, subjectResults.map(r => r.marks));
     }
 
-    // Overall position (all subjects)
-    const { data: allStudentsInClassExam, error: classExamError } = await supabaseClient
+    // 2. Calculate overall position
+    const { data: overallResults, error: overallError } = await supabaseClient
       .rpc('get_student_total_marks_for_examination', {
         p_examination_id: examId,
         p_class_id: studentClassId
       });
-    
-    examData.positionAllSubjects = classExamError ? 'N/A' : 
-      calculateRank(examData.overallTotalMarks, allStudentsInClassExam.map(s => s.total_marks));
 
-    // Core subjects position
-    if (examData.coreSubjectsRawScore > 0) {
-      try {
-        const { data: allStudentsCoreScores, error: coreError } = await supabaseClient
-          .from('results')
-          .select(`
-            student_id,
-            marks,
-            sessions!inner(
-              examination_id,
-              class_id,
-              subjects!inner(name)
-            )
-          `)
-          .eq('sessions.examination_id', examId)
-          .eq('sessions.class_id', studentClassId)
-          .in('sessions.subjects.name', CORE_SUBJECT_NAMES_LOWERCASE);
+    examData.overallPosition = overallError ? 'N/A' : 
+      calculateExamRank(examData.overallTotal, overallResults.map(r => r.total_marks));
 
-        if (!coreError && allStudentsCoreScores) {
-          const studentCoreTotals = allStudentsCoreScores.reduce((acc, result) => {
-            acc[result.student_id] = (acc[result.student_id] || 0) + result.marks;
-            return acc;
-          }, {});
+    // 3. Calculate core subjects position (EXACT IMPLEMENTATION FROM YOUR IMAGE)
+    const { data: classResults, error: classError } = await supabaseClient
+      .from('results')
+      .select(`
+        student_id,
+        marks,
+        sessions!inner(
+          examination_id,
+          subjects!inner(name)
+      `)
+      .eq('sessions.examination_id', examId)
+      .eq('sessions.class_id', studentClassId);
 
-          examData.positionCoreSubjects = calculateRank(
-            examData.coreSubjectsRawScore,
-            Object.values(studentCoreTotals)
-          );
-          examData.coreSubjectsRankingPoolSize = Object.keys(studentCoreTotals).length;
-        } else {
-          examData.positionCoreSubjects = 'N/A';
+    if (!classError && classResults) {
+      // Calculate core totals for all students
+      const studentCoreTotals = {};
+      classResults.forEach(result => {
+        const subjectName = result.sessions.subjects.name.toLowerCase();
+        if (CORE_SUBJECT_CODES.some(code => subjectName.includes(code))) {
+          studentCoreTotals[result.student_id] = 
+            (studentCoreTotals[result.student_id] || 0) + result.marks;
         }
-      } catch (e) {
-        console.error('Core subjects ranking error:', e);
-        examData.positionCoreSubjects = 'N/A';
-      }
+      });
+
+      // Calculate rank for this student
+      examData.coreSubjects.position = calculateExamRank(
+        examData.coreSubjects.rawTotal,
+        Object.values(studentCoreTotals)
+      );
     } else {
-      examData.positionCoreSubjects = 'N/A';
+      examData.coreSubjects.position = 'N/A';
     }
   }
-  
+
   return {
     studentName: studentInfo?.name || 'Unknown Student',
-    className: studentInfo?.classes?.name || resultsByExamination[Object.keys(resultsByExamination)[0]]?.className || 'N/A',
-    examinations: Object.values(resultsByExamination).sort((a,b) => 
-      new Date(b.examinationDate) - new Date(a.examinationDate)),
+    className: studentInfo?.classes?.name || 'N/A',
+    examinations: Object.values(resultsByExamination).sort((a, b) => 
+      new Date(b.examinationDate) - new Date(a.examinationDate))
   };
 }
-
-export async function fetchGeneralResults(supabaseClient, generationType, filters) {
-  let query;
-  const baseSelect = `
-    id, 
-    marks, 
-    students (id, name, classes(name)), 
-    sessions (
-      id,
-      examinations (id, name, examination_date), 
-      classes (id, name), 
-      subjects (id, name),
-      users (id, name, email)
-    )
-  `;
-
-  if (generationType === 'specificClass') {
-    const { data: sessionData, error: sessionError } = await supabaseClient
-      .from('sessions')
-      .select('id')
-      .eq('examination_id', filters.examinationId)
-      .eq('class_id', filters.classId)
-      .eq('subject_id', filters.subjectId);
-
-    if (sessionError && sessionError.code !== 'PGRST116') throw sessionError;
-    if (!sessionData || sessionData.length === 0) return [];
-    
-    const sessionIds = sessionData.map(s => s.id);
-    query = supabaseClient.from('results').select(baseSelect).in('session_id', sessionIds);
-  } else {
-    query = supabaseClient.from('results').select(baseSelect).order('created_at', { ascending: false });
-  }
-  
-  const { data, error } = await query;
-  if (error) throw error;
-  return data || [];
-      }
