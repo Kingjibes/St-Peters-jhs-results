@@ -1,9 +1,10 @@
+// src/pages/AdminDashboard/utils/resultsProcessor.js
 import { supabase } from '@/lib/supabaseClient';
 
 export const CORE_SUBJECT_NAMES_LOWERCASE = [
   "mathematics", 
   "english language",
-  "integrated science",
+  "integrated science", 
   "social studies"
 ];
 
@@ -11,20 +12,39 @@ export const CORE_SUBJECT_NAMES_LOWERCASE = [
 const calculateRank = (currentScore, allScores) => {
   if (!allScores || allScores.length === 0) return 'N/A';
   
-  // Create array of unique scores sorted descending
   const uniqueScores = [...new Set(allScores)].sort((a, b) => b - a);
-  
-  // Create rank map (handles ties)
   const rankMap = new Map();
   let rank = 1;
   
   uniqueScores.forEach((score, index) => {
     rankMap.set(score, rank);
-    rank = index + 2; // Increment rank for next unique score
+    rank = index + 2;
   });
   
   return rankMap.get(currentScore) || 'N/A';
 };
+
+// Export all functions that are used by other files
+export async function fetchFilterData() {
+  const [examRes, classRes, subjectRes, studentRes] = await Promise.all([
+    supabase.from('examinations').select('id, name, examination_date').order('examination_date', { ascending: false }),
+    supabase.from('classes').select('id, name').order('name'),
+    supabase.from('subjects').select('id, name').order('name'),
+    supabase.from('students').select('id, name, classes (id, name)').order('name')
+  ]);
+
+  if (examRes.error) throw examRes.error;
+  if (classRes.error) throw classRes.error;
+  if (subjectRes.error) throw subjectRes.error;
+  if (studentRes.error) throw studentRes.error;
+  
+  return {
+    examinations: examRes.data || [],
+    classes: classRes.data || [],
+    subjects: subjectRes.data || [],
+    allStudents: studentRes.data || [],
+  };
+}
 
 export async function processStudentResultsForDetailView(supabaseClient, studentId, allStudentsList) {
   // 1. Fetch all results for the student
@@ -150,3 +170,40 @@ export async function processStudentResultsForDetailView(supabaseClient, student
     ),
   };
 }
+
+export async function fetchGeneralResults(supabaseClient, generationType, filters) {
+  let query;
+  const baseSelect = `
+    id, 
+    marks, 
+    students (id, name, classes(name)), 
+    sessions (
+      id,
+      examinations (id, name, examination_date), 
+      classes (id, name), 
+      subjects (id, name),
+      users (id, name, email)
+    )
+  `;
+
+  if (generationType === 'specificClass') {
+    const { data: sessionData, error: sessionError } = await supabaseClient
+      .from('sessions')
+      .select('id')
+      .eq('examination_id', filters.examinationId)
+      .eq('class_id', filters.classId)
+      .eq('subject_id', filters.subjectId);
+
+    if (sessionError && sessionError.code !== 'PGRST116') throw sessionError;
+    if (!sessionData || sessionData.length === 0) return [];
+
+    const sessionIds = sessionData.map(s => s.id);
+    query = supabaseClient.from('results').select(baseSelect).in('session_id', sessionIds);
+  } else {
+    query = supabaseClient.from('results').select(baseSelect).order('created_at', { ascending: false });
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+  return data || [];
+    }
