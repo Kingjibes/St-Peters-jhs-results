@@ -18,6 +18,50 @@ const calculateRank = (score, allScores) => {
   return sorted.indexOf(+score) + 1 || 'N/A';
 };
 
+export async function fetchGeneralResults(supabaseClient, generationType, filters) {
+  try {
+    const baseSelect = `
+      id, marks,
+      students(id, name, classes(name)),
+      sessions(
+        id, examinations(id, name, examination_date),
+        classes(id, name),
+        subjects(id, name),
+        users(id, name, email)
+    `;
+
+    let query;
+    if (generationType === 'specificClass') {
+      const { data: sessionData, error } = await supabaseClient
+        .from('sessions')
+        .select('id')
+        .eq('examination_id', filters.examinationId)
+        .eq('class_id', filters.classId)
+        .eq('subject_id', filters.subjectId);
+
+      if (error) throw error;
+      if (!sessionData?.length) return [];
+
+      query = supabaseClient
+        .from('results')
+        .select(baseSelect)
+        .in('session_id', sessionData.map(s => s.id));
+    } else {
+      query = supabaseClient
+        .from('results')
+        .select(baseSelect)
+        .order('created_at', { ascending: false });
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  } catch (err) {
+    console.error('Error fetching general results:', err);
+    return [];
+  }
+}
+
 export async function processStudentResultsForDetailView(supabaseClient, studentId, allStudentsList) {
   try {
     // Fetch student results
