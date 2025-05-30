@@ -19,7 +19,7 @@ export const exportResultsToCSV = (dataToExport, fileNamePrefix, toast) => {
         "Teacher Name": result.sessions?.users?.name || result.sessions?.users?.email || 'N/A',
     }));
     const csv = Papa.unparse(csvData);
-    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' }); // Added BOM for Excel
     const fileName = `${fileNamePrefix}_${new Date().toISOString().split('T')[0]}.csv`;
     saveAs(blob, fileName);
     toast({ title: "Export Successful", description: `Results exported to ${fileName}`});
@@ -47,168 +47,85 @@ export const exportResultsToExcel = (dataToExport, fileNamePrefix, toast) => {
     toast({ title: "Export Successful", description: `Results exported to ${fileName}`});
 };
 
+
 export const exportStudentDetailToWord = async (studentData, toast) => {
     if (!studentData) {
         toast({ variant: "destructive", title: "No Data", description: "No student details to export." });
         return;
     }
     try {
-        // Document title
         const sections = [
             new Paragraph({
-                children: [new TextRun({ 
-                    text: "STUDENT PERFORMANCE REPORT", 
-                    bold: true, 
-                    size: 36,
-                    color: "2E5984",
-                    font: "Calibri"
-                })],
-                heading: HeadingLevel.TITLE, 
-                alignment: AlignmentType.CENTER, 
-                spacing: { after: 400 },
-                border: { bottom: { color: "2E5984", size: 8, style: "single" } }
+                children: [new TextRun({ text: "Student Performance Report", bold: true, size: 32 })],
+                heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER, spacing: { after: 300 },
             }),
-            
-            // Student information
             new Paragraph({
-                children: [new TextRun({ 
-                    text: `Student Name: ${studentData.studentName}`, 
-                    size: 28,
-                    font: "Calibri",
-                    bold: true
-                })],
-                spacing: { after: 150 },
+                children: [new TextRun({ text: `Student Name: ${studentData.studentName}`, bold: true, size: 24 })],
+                spacing: { after: 100 },
             }),
-            
             new Paragraph({
-                children: [new TextRun({ 
-                    text: `Class: ${studentData.className}`, 
-                    size: 28,
-                    font: "Calibri",
-                    bold: true
-                })],
-                spacing: { after: 150 },
+                children: [new TextRun({ text: `Class: ${studentData.className}`, size: 22 })],
+                spacing: { after: 200 },
             }),
-            
-            new Paragraph({
-                children: [new TextRun({ 
-                    text: `Examination: ${studentData.examinationName}`, 
-                    size: 28,
-                    font: "Calibri",
-                    bold: true
-                })],
-                spacing: { after: 400 },
-            })
         ];
 
-        // Create the vertical results table
-        const tableRows = [];
-        
-        // Add all subject data in vertical format
-        const subjectData = [
-            { label: "ENGLISH (ENG)", value: studentData.engMarks },
-            { label: "MATHEMATICS (MATH)", value: studentData.mathMarks },
-            { label: "SCIENCE (SCI)", value: studentData.sciMarks },
-            { label: "SOCIAL STUDIES (SOC)", value: studentData.socMarks },
-            { label: "RELIGIOUS & MORAL EDUCATION (RME)", value: studentData.rmeMarks },
-            { label: "COMPUTING (COMP)", value: studentData.compMarks },
-            { label: "FRENCH (FRE)", value: studentData.freMarks },
-            { label: "CAD", value: studentData.cadMarks },
-            { label: "CT", value: studentData.ctMarks },
-            { label: "TWI", value: studentData.twiMarks },
-            { 
-                label: "TOTAL SCORE", 
-                value: studentData.totalMarks,
-                isTotal: true 
-            },
-            { 
-                label: "POSITION (ALL SUBJECTS)", 
-                value: studentData.positionAllSubjects,
-                isTotal: true 
-            },
-            { 
-                label: "RAW SCORE (4 CORE SUBJECTS)", 
-                value: studentData.coreSubjectsRawScore,
-                isTotal: true 
-            },
-            { 
-                label: "POSITION (4 CORE SUBJECTS)", 
-                value: studentData.positionCoreSubjects,
-                isTotal: true 
-            }
-        ];
+        studentData.examinations.forEach(exam => {
+            sections.push(
+                new Paragraph({
+                    children: [new TextRun({ text: exam.examinationName, bold: true, size: 24 })],
+                    heading: HeadingLevel.HEADING_1, spacing: { before: 400, after: 100 },
+                }),
+                new Paragraph({
+                    children: [new TextRun({ text: `Date: ${exam.examinationDate || 'N/A'}`, size: 20 })],
+                    spacing: { after: 200 },
+                })
+            );
 
-        subjectData.forEach((item, index) => {
-            const isAlternate = index % 2 === 0;
-            const bgColor = isAlternate ? "FFFFFF" : "F2F2F2";
-            const textColor = item.isTotal ? "2E5984" : "000000";
-            const isBold = item.isTotal ? true : false;
+            const tableRows = [
+                new DocxTableRow({
+                    children: [
+                        new DocxTableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Subject", bold: true })] })], width: { size: 3000, type: WidthType.DXA } }),
+                        new DocxTableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Marks", bold: true })] })], width: { size: 1500, type: WidthType.DXA } }),
+                        new DocxTableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Position (Subject)", bold: true })] })], width: { size: 2000, type: WidthType.DXA } }),
+                    ], tableHeader: true,
+                })
+            ];
 
-            tableRows.push(new DocxTableRow({
-                children: [
-                    new DocxTableCell({
-                        children: [new Paragraph({
-                            children: [new TextRun({ 
-                                text: item.label, 
-                                bold: isBold,
-                                color: textColor
-                            })],
-                            alignment: AlignmentType.LEFT
-                        })],
-                        width: { size: 6000, type: WidthType.DXA },
-                        shading: { fill: bgColor },
-                        margins: { top: 100, bottom: 100, left: 200, right: 100 }
-                    }),
-                    new DocxTableCell({
-                        children: [new Paragraph({
-                            children: [new TextRun({ 
-                                text: item.value.toString(), 
-                                bold: isBold,
-                                color: textColor
-                            })],
-                            alignment: AlignmentType.CENTER
-                        })],
-                        width: { size: 2000, type: WidthType.DXA },
-                        shading: { fill: bgColor },
-                        margins: { top: 100, bottom: 100, left: 100, right: 200 }
-                    })
-                ]
+            exam.subjects.forEach(subject => {
+                tableRows.push(new DocxTableRow({
+                    children: [
+                        new DocxTableCell({ children: [new Paragraph(subject.name)] }),
+                        new DocxTableCell({ children: [new Paragraph(subject.marks.toString())] }),
+                        new DocxTableCell({ children: [new Paragraph(subject.rank ? subject.rank.toString() : 'N/A')] }),
+                    ],
+                }));
+            });
+            sections.push(new DocxTable({ rows: tableRows, width: { size: 9000, type: WidthType.DXA }, columnWidths: [3000, 1500, 2000] }));
+            
+            sections.push(new Paragraph({
+                children: [new TextRun({ text: `Total Marks (${exam.examinationName}): ${exam.overallTotalMarks}`, bold: true, size: 20 })],
+                spacing: { before: 200, after: 50 },
             }));
-        });
+            sections.push(new Paragraph({
+                children: [new TextRun({ text: `Position (All Subjects): ${exam.positionAllSubjects || 'N/A'}`, bold: true, size: 20 })],
+                spacing: { after: 100 },
+            }));
 
-        // Add the vertical table to the document
-        sections.push(new DocxTable({ 
-            rows: tableRows, 
-            width: { size: 9000, type: WidthType.DXA },
-            margins: { top: 100, bottom: 100, left: 100, right: 100 },
-            borders: {
-                top: { style: "single", size: 4, color: "2E5984" },
-                bottom: { style: "single", size: 4, color: "2E5984" },
-                left: { style: "single", size: 4, color: "2E5984" },
-                right: { style: "single", size: 4, color: "2E5984" },
-                insideHorizontal: { style: "single", size: 2, color: "CCCCCC" },
-                insideVertical: { style: "single", size: 2, color: "CCCCCC" }
+            if (exam.coreSubjectsRawScore > 0) {
+                 sections.push(
+                    new Paragraph({
+                        children: [new TextRun({ text: `Raw Score (4 Core Subjects): ${exam.coreSubjectsRawScore}`, bold: true, size: 20 })],
+                        spacing: { after: 50 },
+                    }),
+                    new Paragraph({
+                        children: [new TextRun({ text: `Position (4 Core Subjects): ${exam.positionCoreSubjects || 'N/A'}`, bold: true, size: 20 })],
+                        spacing: { after: 200 },
+                    })
+                );
             }
-        }));
-
-        // Create the document
-        const doc = new Document({
-            styles: {
-                paragraphStyles: [{
-                    id: "Normal",
-                    name: "Normal",
-                    run: {
-                        size: 24, // Default font size (12pt)
-                        font: "Calibri"
-                    },
-                    paragraph: {
-                        spacing: { line: 276 } // Line spacing (1.15)
-                    }
-                }]
-            },
-            sections: [{ children: sections }]
         });
 
+        const doc = new Document({ sections: [{ children: sections }] });
         const blob = await Packer.toBlob(doc);
         saveAs(blob, `${studentData.studentName.replace(/\s+/g, '_')}_Performance_Report.docx`);
         toast({ title: "Export Successful", description: "Student report exported as DOCX." });
@@ -218,9 +135,12 @@ export const exportStudentDetailToWord = async (studentData, toast) => {
     }
 };
 
+
 // Helper to find or create session (simplified example, needs user context for teacher_id)
-async function findOrCreateSession(supabase, { examination_id, class_id, subject_id, teacher_id }) {
-    const effectiveTeacherId = teacher_id || '00000000-0000-0000-0000-000000000000';
+async function findOrCreateSession(supabase, { examination_id, class_id, subject_id, teacher_id /* admin might not have this readily */ }) {
+    // For admin import, teacher_id might be tricky. Using a default/placeholder if not available.
+    // A robust solution might involve selecting a teacher during import or using a generic admin user ID.
+    const effectiveTeacherId = teacher_id || '00000000-0000-0000-0000-000000000000'; // Placeholder UUID
 
     let { data: session, error: sessionErr } = await supabase
         .from('sessions')
@@ -228,18 +148,25 @@ async function findOrCreateSession(supabase, { examination_id, class_id, subject
         .eq('examination_id', examination_id)
         .eq('class_id', class_id)
         .eq('subject_id', subject_id)
+        // .eq('teacher_id', effectiveTeacherId) // teacher_id is crucial for session uniqueness by teacher
         .single();
 
-    if (sessionErr && sessionErr.code !== 'PGRST116') {
+    if (sessionErr && sessionErr.code !== 'PGRST116') { // PGRST116: no rows found
         throw sessionErr;
     }
 
     if (!session) {
+        // If admin is importing, they might need to create sessions.
+        // This assumes admin has rights to create sessions or select an existing one.
+        // For simplicity, this example doesn't create a new session if not found for admin.
+        // It implies the session should pre-exist from a teacher's action.
+        // A more complex UI would allow admin to map to existing sessions or create new ones.
         console.warn(`Session not found for exam ${examination_id}, class ${class_id}, subject ${subject_id}. Cannot import result for this combination without a valid session.`);
         return null; 
     }
     return session.id;
 }
+
 
 export const handleResultsWordImport = async ({ supabase, file, allStudents, examinations, classes, subjects, toast }) => {
     let importedResultsCount = 0;
@@ -254,7 +181,7 @@ export const handleResultsWordImport = async ({ supabase, file, allStudents, exa
 
         for (const table of tables) {
             const rows = table.querySelectorAll('tr');
-            for (let i = 1; i < rows.length; i++) {
+            for (let i = 1; i < rows.length; i++) { // Skip header row
                 const cells = rows[i].querySelectorAll('td');
                 if (cells.length >= 5) {
                     const studentName = cells[0].textContent.trim();
@@ -274,6 +201,7 @@ export const handleResultsWordImport = async ({ supabase, file, allStudents, exa
                                 examination_id: examination.id,
                                 class_id: studentClass.id,
                                 subject_id: subject.id,
+                                // teacher_id: null // Admin import, session might pre-exist
                             });
 
                             if (session_id) {
@@ -281,7 +209,7 @@ export const handleResultsWordImport = async ({ supabase, file, allStudents, exa
                                     session_id: session_id,
                                     student_id: student.id,
                                     marks: marks,
-                                }, { onConflict: 'session_id, student_id' });
+                                }, { onConflict: 'session_id, student_id' }); // Upsert to update if exists
                                 if (insertError) console.error("Error upserting result from Word:", insertError);
                                 else importedResultsCount++;
                             }
@@ -295,7 +223,7 @@ export const handleResultsWordImport = async ({ supabase, file, allStudents, exa
     } catch (error) {
         console.error("Error processing Word document:", error);
         toast({variant: "destructive", title: "Word Processing Error", description: error.message});
-        throw error;
+        throw error; // Re-throw for the main handler
     }
     return importedResultsCount;
 };
@@ -317,7 +245,7 @@ export const handleResultsExcelImport = async ({ supabase, file, allStudents, ex
 
         toast({title: "Importing...", description: "Please ensure your Excel sheet has headers: Student Name, Examination Name, Class Name, Subject Name, Marks."});
 
-        if (jsonData.length > 1) {
+        if (jsonData.length > 1) { // More than just header
             const headers = jsonData[0].map(h => h.toString().trim().toLowerCase());
             const studentNameCol = headers.indexOf("student name");
             const examNameCol = headers.indexOf("examination name");
@@ -344,7 +272,7 @@ export const handleResultsExcelImport = async ({ supabase, file, allStudents, ex
                     const subject = subjects.find(s => s.name.toLowerCase() === subjectName.toLowerCase());
 
                     if (student && examination && studentClass && subject) {
-                        const session_id = await findOrCreateSession(supabase, {
+                         const session_id = await findOrCreateSession(supabase, {
                             examination_id: examination.id,
                             class_id: studentClass.id,
                             subject_id: subject.id,
@@ -367,7 +295,7 @@ export const handleResultsExcelImport = async ({ supabase, file, allStudents, ex
     } catch (error) {
         console.error("Error processing Excel document:", error);
         toast({variant: "destructive", title: "Excel Processing Error", description: error.message});
-        throw error;
+        throw error; // Re-throw
     }
     return importedResultsCount;
 };
